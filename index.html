@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Quantizer + Minimap Pathfinder</title>
+    <script src="https://cdn.jsdelivr.net/npm/easystarjs@0.4.4/bin/easystar.min.js">
+    </script>
+    <style>
+        :root {
+            --bg: #1a1a2e;
+            --panel-bg: #16213e;
+            --text: #e0e0e0;
+            --text-secondary: #a0a0b8;
+            --accent: #4a9eff;
+            --accent2: #ff6b6b;
+            --border: #2a2a4a;
+            --input-bg: #1e1e36;
+            --swatch-size: 40px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', 'Inter', system-ui, -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            height: 100vh;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        /* ── Top Bar ─────────────────────── */
+        .top-bar {
+            background: var(--panel-bg);
+            border-bottom: 1px solid var(--border);
+            padding: 10px 20px;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 12px;
+            z-index: 10;
+            flex-shrink: 0;
+        }
+        .top-bar .title {
+            font-weight: 700;
+            font-size: 1.1rem;
+            letter-spacing: -0.01em;
+            color: #fff;
+            margin-right: 8px;
+            white-space: nowrap;
+        }
+        .top-bar label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--text-secondary);
+            white-space: nowrap;
+        }
+        .top-bar input[type="file"] {
+            font-size: 0.78rem;
+            color: var(--text);
+            background: var(--input-bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 5px 8px;
+            cursor: pointer;
+            max-width: 200px;
+            transition: border-color 0.2s;
+        }
+        .top-bar input[type="file"]:hover {
+            border-color: var(--accent);
+        }
+        .top-bar input[type="file"]::file-selector-button {
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            padding: 4px 10px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.75rem;
+            margin-right: 6px;
+        }
+
+        /* ── Swatches ───────────────────── */
+        .swatches-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-shrink: 0;
+            margin-left: 4px;
+        }
+        .swatches-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--text-secondary);
+            white-space: nowrap;
+        }
+        .swatch-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            cursor: pointer;
+            padding: 3px 8px;
+            border-radius: 8px;
+            background: var(--input-bg);
+            border: 2px solid transparent;
+            transition: all 0.2s;
+            position: relative;
+        }
+        .swatch-item:hover {
+            border-color: #555;
+        }
+        .swatch-item.selected-wall {
+            border-color: var(--accent2);
+            background: #2a1a1a;
+        }
+        .swatch-color {
+            width: 22px;
+            height: 22px;
+            border-radius: 4px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            flex-shrink: 0;
+        }
+        .swatch-item input[type="checkbox"] {
+            accent-color: var(--accent2);
+            width: 15px;
+            height: 15px;
+            cursor: pointer;
+        }
+        .swatch-item .swatch-label-text {
+            font-size: 0.7rem;
+            color: #ccc;
+            white-space: nowrap;
+        }
+
+        /* ── Main Canvas Area ──────────── */
+        .canvas-container {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            cursor: grab;
+            background: #0d0d1a;
+            border-top: 1px solid var(--border);
+        }
+        .canvas-container:active {
+            cursor: grabbing;
+        }
+        .canvas-container.grabbing {
+            cursor: grabbing;
+        }
+        canvas#mainCanvas {
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        /* ── Status Bar ────────────────── */
+        .status-bar {
+            background: var(--panel-bg);
+            border-top: 1px solid var(--border);
+            padding: 6px 16px;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            display: flex;
+            gap: 16px;
+            flex-shrink: 0;
+            flex-wrap: wrap;
+            min-height: 30px;
+            align-items: center;
+        }
+        .status-bar .status-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .status-dot.good {
+            background: #4caf84;
+        }
+        .status-dot.warn {
+            background: #f0a040;
+        }
+        .status-dot.error {
+            background: #e05050;
+        }
+        .status-dot.neutral {
+            background: #555;
+        }
+
+        /* ── Preview thumb ─────────────── */
+        .preview-thumb {
+            width: 36px;
+            height: 36px;
+            border-radius: 4px;
+            border: 1px solid var(--border);
+            object-fit: contain;
+            background: #000;
+            flex-shrink: 0;
+            image-rendering: pixelated;
+        }
+
+        /* ── Zoom indicator ────────────── */
+        .zoom-indicator {
+            position: absolute;
+            bottom: 12px;
+            right: 16px;
+            background: rgba(0, 0, 0, 0.7);
+            color: #ccc;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.7rem;
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        @media (max-width: 768px) {
+            .top-bar {
+                padding: 8px 10px;
+                gap: 6px;
+            }
+            .top-bar input[type="file"] {
+                max-width: 140px;
+                font-size: 0.7rem;
+            }
+            .swatch-color {
+                width: 16px;
+                height: 16px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ═══════════════ TOP BAR ═══════════════ -->
+    <div class="top-bar">
+        <span class="title">🧭 Quantizer + Pathfinder</span>
+
+        <label for="fileA">📷 Image A</label>
+        <input type="file" id="fileA" accept="image/*" title="Quantize to 3 colors – select walls">
+
+        <label for="fileB">🧱 Image B</label>
+        <input type="file" id="fileB" accept="image/*" title="All non-transparent pixels → walls">
+
+        <label for="fileC">🎯 Image C</label>
+        <input type="file" id="fileC" accept="image/*" title="Brightest pixel → target">
+
+        <!-- Swatches injected here dynamically -->
+        <div class="swatches-row" id="swatchesContainer">
+            <span class="swatches-label" style="opacity:0.5;">Walls:</span>
+            <span style="font-size:0.7rem;color:#666;">(upload Image A)</span>
+        </div>
+    </div>
+
+    <!-- ═══════════════ MAIN CANVAS ═══════════════ -->
+    <div class="canvas-container" id="canvasContainer">
+        <canvas id="mainCanvas"></canvas>
+        <div class="zoom-indicator" id="zoomIndicator">100%</div>
+    </div>
+
+    <!-- ═══════════════ STATUS BAR ═══════════════ -->
+    <div class="status-bar" id="statusBar">
+        <span class="status-item"><span class="status-dot neutral" id="dotA"></span> Image A: <span id="statusA">not loaded</span></span>
+        <span class="status-item"><span class="status-dot neutral" id="dotB"></span> Image B: <span id="statusB">not loaded</span></span>
+        <span class="status-item"><span class="status-dot neutral" id="dotC"></span> Image C: <span id="statusC">not loaded</span></span>
+        <span class="status-item"><span class="status-dot neutral" id="dotPath"></span> Path: <span id="statusPath">awaiting inputs</span></span>
+    </div>
+
+    <script src="engine.js">
+    </script>
+</body>
+</html>
